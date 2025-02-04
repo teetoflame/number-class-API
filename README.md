@@ -1,4 +1,3 @@
-```markdown
 # Number Classification API
 
 This API classifies a given number based on various mathematical properties and provides a fun fact about the number using an external Numbers API.
