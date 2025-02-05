@@ -66,7 +66,7 @@ pip freeze > requirements.txt
 After installing the dependencies, you can run the application using `uvicorn`:
 
 ```bash
-uvicorn app:app --host 0.0.0.0 --port 8000
+nohup uvicorn app:app --host 0.0.0.0 --port 8000 &
 ```
 
 This will start the FastAPI application on port `8000` and make it accessible on your EC2 instance.
