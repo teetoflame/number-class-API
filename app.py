@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict, Union
+from fastapi.responses import JSONResponse
 import requests
 import math
+from typing import List, Dict, Union
 
 app = FastAPI()
 
@@ -15,7 +16,15 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-# Helper functions
+class CustomHTTPException(Exception):
+    def __init__(self, status_code: int, content: dict):
+        self.status_code = status_code
+        self.content = content
+
+@app.exception_handler(CustomHTTPException)
+async def custom_http_exception_handler(request: Request, exc: CustomHTTPException):
+    return JSONResponse(status_code=exc.status_code, content=exc.content)
+
 def is_prime(n: int) -> bool:
     """Check if a number is prime."""
     if n < 2:
@@ -34,23 +43,21 @@ def is_perfect(n: int) -> bool:
 
 def is_armstrong(n: int) -> bool:
     """Check if a number is Armstrong."""
-    num_str = str(n)
+    num_str = str(abs(n))  # Use absolute value for Armstrong check
     power = len(num_str)
-    return sum(int(digit) ** power for digit in num_str) == n
+    return sum(int(digit) ** power for digit in num_str) == abs(n)
 
 def get_digit_sum(n: int) -> int:
     """Calculate sum of digits."""
-    return sum(int(digit) for digit in str(n))
+    return sum(int(digit) for digit in str(abs(n)))
 
 def get_properties(n: int) -> List[str]:
     """Get list of number properties."""
     properties = []
     
-    # Check Armstrong
     if is_armstrong(n):
         properties.append("armstrong")
     
-    # Check odd/even
     if n % 2 == 0:
         properties.append("even")
     else:
@@ -62,53 +69,29 @@ async def get_fun_fact(n: int) -> str:
     """Get fun fact from Numbers API."""
     try:
         response = requests.get(f"http://numbersapi.com/{n}/math", timeout=5)
-        return response.text
+        if response.status_code == 200:
+            return response.text
     except requests.RequestException:
-        return f"{n} is a number"
+        pass
+    return f"{n} is a number."
 
-# Main route to classify number
-@app.get("/classify-number")
-async def classify_number(number: int = Query(..., description="The number to classify")) -> Dict[str, Union[int, bool, List[str], str]]:
+@app.get("/api/classify-number", response_model=Dict[str, Union[int, float, bool, List[str], str]] )
+async def classify_number(number: str):
     """Classify a number and return its properties."""
-    # Validate if the number is negative
-    if number < 0:
-        raise HTTPException(status_code=400, detail="Number must be non-negative")
-
-    # Get properties and calculations
-    properties = get_properties(number)
-    fun_fact = await get_fun_fact(number)
-
-    # Return the classification
-    return {
-        "number": number,
-        "is_prime": is_prime(number),
-        "is_perfect": is_perfect(number),
-        "properties": properties,
-        "digit_sum": get_digit_sum(number),
-        "fun_fact": fun_fact
-    }
-
-# Error handling for invalid input
-@app.get("/api/classify-number")
-async def classify_number_with_string(number: str) -> Dict[str, Union[int, bool, List[str], str]]:
-    """Classify a number and handle invalid inputs."""
     try:
-        num = int(number)
+        num = float(number) if '.' in number else int(number)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Number must be numeric")
+        raise CustomHTTPException(status_code=400, content={"number": number, "error": True})
     
-    if num < 0:
-        raise HTTPException(status_code=400, detail="Number must be non-negative")
+    properties = get_properties(int(num)) if num == int(num) else []
+    fun_fact = await get_fun_fact(int(num)) if num == int(num) else "Fun facts are only available for integers."
     
-    properties = get_properties(num)
-    fun_fact = await get_fun_fact(num)
-
     return {
         "number": num,
-        "is_prime": is_prime(num),
-        "is_perfect": is_perfect(num),
+        "is_prime": is_prime(int(num)) if num == int(num) and num > 0 else False,
+        "is_perfect": is_perfect(int(num)) if num == int(num) and num > 0 else False,
         "properties": properties,
-        "digit_sum": get_digit_sum(num),
+        "digit_sum": get_digit_sum(int(num)),
         "fun_fact": fun_fact
     }
 
