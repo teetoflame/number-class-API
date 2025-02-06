@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Dict, Union
 import requests
 import math
-from typing import List, Dict, Union
 
 app = FastAPI()
 
@@ -15,6 +15,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+# Helper functions
 def is_prime(n: int) -> bool:
     """Check if a number is prime."""
     if n < 2:
@@ -60,27 +61,48 @@ def get_properties(n: int) -> List[str]:
 async def get_fun_fact(n: int) -> str:
     """Get fun fact from Numbers API."""
     try:
-        response = requests.get(f"http://numbersapi.com/{n}/math")
+        response = requests.get(f"http://numbersapi.com/{n}/math", timeout=5)
         return response.text
-    except:
+    except requests.RequestException:
         return f"{n} is a number"
 
-@app.get("/")
-async def read_root():
-    """Root endpoint."""
-    return {"message": "Welcome to the Number Classification API!"}
-
-@app.get("/api/classify-number")
-async def classify_number(number: str) -> Dict[str, Union[int, bool, List[str], str]]:
+# Main route to classify number
+@app.get("/classify-number")
+async def classify_number(number: int = Query(..., description="The number to classify")) -> Dict[str, Union[int, bool, List[str], str]]:
     """Classify a number and return its properties."""
+    # Validate if the number is negative
+    if number < 0:
+        raise HTTPException(status_code=400, detail="Number must be non-negative")
+
+    # Get properties and calculations
+    properties = get_properties(number)
+    fun_fact = await get_fun_fact(number)
+
+    # Return the classification
+    return {
+        "number": number,
+        "is_prime": is_prime(number),
+        "is_perfect": is_perfect(number),
+        "properties": properties,
+        "digit_sum": get_digit_sum(number),
+        "fun_fact": fun_fact
+    }
+
+# Error handling for invalid input
+@app.get("/api/classify-number")
+async def classify_number_with_string(number: str) -> Dict[str, Union[int, bool, List[str], str]]:
+    """Classify a number and handle invalid inputs."""
     try:
         num = int(number)
     except ValueError:
-        return {"number": number, "error": True}
+        raise HTTPException(status_code=400, detail="Number must be numeric")
+    
+    if num < 0:
+        raise HTTPException(status_code=400, detail="Number must be non-negative")
     
     properties = get_properties(num)
     fun_fact = await get_fun_fact(num)
-    
+
     return {
         "number": num,
         "is_prime": is_prime(num),
